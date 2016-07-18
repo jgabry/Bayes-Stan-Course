@@ -1,0 +1,182 @@
+---
+title: "Linear regression in Stan"
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library("ggplot2")
+library("gridExtra")
+library("bayesplot")
+library("rstan")
+```
+
+```{r rstan-options}
+options(mc.cores = parallel::detectCores())
+```
+
+
+### Load and look at the data
+
+```{r linear-regression-data}
+load("kidiq.rda")
+head(kidiq)
+```
+
+```{r plot1}
+theme_set(bayesplot::theme_default())
+p <- ggplot(kidiq,
+            aes(
+              x = mom_iq,
+              y = kid_score,
+              color = mom_hs == 1
+            ))
+p1 <- p + 
+  geom_point(size = 2.5, color = "#DCBCBC") +
+  geom_smooth(method = "lm", se = FALSE, color = "#7C0000", fill = NA)
+
+p1
+```
+
+```{r plot2}
+# color by mom_hs
+p2 <- p + 
+  geom_point(size = 2.5) + 
+  scale_color_manual("Mom HS", values = c("#DCBCBC", "#B97C7C")) + 
+  theme_default(legend_position = "right")
+
+p2
+```
+
+```{r plot3}
+p3 <- p2 + geom_smooth(method = "lm", se = FALSE, size = 2)
+p3
+```
+
+### Translate Stan code to C++ and compile
+```{r mod1, cache=TRUE}
+mod1 <- stan_model("linear-regression.stan")
+```
+
+### Fit the model with MCMC
+```{r fit1, results="hide", message=FALSE, warning=FALSE}
+y <- kidiq$kid_score
+X <- model.matrix(~ 0 + mom_iq * mom_hs, data = kidiq)
+N <- nrow(X)
+K <- ncol(X)
+
+fit1 <- sampling(mod1, data = c("N", "K", "y", "X"))
+print(fit1, pars = c("alpha", "beta"))
+```
+```{r fit1-print, echo=FALSE}
+print(fit1, pars = c("alpha", "beta"))
+```
+
+### Look at the estimates
+
+Prior was `normal(0,10)` but look at estimate for `beta[2]` (`mom_hs`)
+
+```{r plot-fit1-beta}
+beta_draws <- as.matrix(fit1, pars = "beta")
+dim(beta_draws)
+
+colnames(beta_draws) <- c("mom_iq", "mom_hs", "mom_iq:mom_hs")
+mcmc_intervals(beta_draws)
+```
+
+Compare posterior and prior for beta2 (too much regularization?)
+
+```{r plot-fit1-beta-2}
+beta2_and_prior <- cbind(
+  prior = rnorm(nrow(beta_draws), 0, 10),
+  posterior = beta_draws[, 2]
+)
+mcmc_areas(beta2_and_prior) 
+```
+
+
+### Rescale data and refit the model
+
+```{r fit2, results="hide", message=FALSE,warning=FALSE}
+d <- list(
+  y = as.vector(scale(y)),
+  X = scale(X),
+  N = nrow(X),
+  K = ncol(X)
+)
+
+fit2 <- sampling(mod1, data = d)
+```
+
+Different estimates because data was rescaled
+```{r plot-fit2-beta}
+beta_draws2 <- as.matrix(fit2, pars = "beta")
+colnames(beta_draws2) <- colnames(beta_draws)
+mcmc_intervals(beta_draws2) 
+```
+
+Comparison to prior is more reasonable than before
+```{r plot-fit2-beta-2}
+beta2_and_prior_2 <- cbind(
+  prior = rnorm(nrow(beta_draws2), 0, 10),
+  posterior = beta_draws2[, 2]
+)
+mcmc_areas(beta2_and_prior_2)
+```
+
+
+We can get the betas back on original scale
+
+```{r rescale-betas}
+sdY_over_sdX <- sd(y) / apply(X, 2, sd)
+beta_draws2b <- sweep(beta_draws2, 2, sdY_over_sdX, "*")
+cbind(colMeans(beta_draws2), colMeans(beta_draws2b))
+```
+
+and compare `beta[2]` from first model to `beta[2]` from second model 
+(after converting back to original scale)
+
+```{r plot-beta-comparison}
+beta2_comparison <- cbind(
+  "First model \n(original data)" = beta_draws[, 2], 
+  "Second model \n(rescaled data)" = beta_draws2b[, 2]
+)
+mcmc_areas(beta2_comparison) + 
+  ggtitle(expression(paste(beta[2], " comparison")))
+```
+
+
+### Posterior predictive checks
+
+Extract `y_rep` from the stanfit object
+```{r extract-yrep}
+y_rep <- as.matrix(fit2, pars = "y_rep")
+```
+
+Why does this look bad?
+```{r ppc-0}
+ppc_dens_overlay(y, y_rep[sample(nrow(y_rep), 100), ])
+```
+
+Because we standardized `y` when we fit the model. So we need to do the 
+same thing for `y` here: 
+```{r scale-y}
+y <- as.vector(scale(y))
+```
+
+These look much better now
+```{r ppc-1}
+ppc_dens_overlay(y, y_rep[sample(nrow(y_rep), 100), ])
+ppc_hist(y, y_rep[1:8, ])
+ppc_stat(y, y_rep, stat = "mean")
+```
+
+```{r ppc-2}
+ppc_stat_grouped(y, y_rep, group = kidiq$mom_hs, stat = "mean")
+ppc_violin_grouped(y, y_rep, group = kidiq$mom_hs)
+```
