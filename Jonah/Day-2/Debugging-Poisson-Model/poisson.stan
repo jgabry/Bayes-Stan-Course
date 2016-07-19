@@ -1,9 +1,9 @@
 data {
-  int<lower = 0> N;
-  int<lower = 0> y[N];
+  int<lower=1> N;
+  int<lower=0> y[N];
 }
 parameters {
-  real<lower = 0> lambda;
+  real<lower=0> lambda;
 }
 model {
   y ~ poisson(lambda);

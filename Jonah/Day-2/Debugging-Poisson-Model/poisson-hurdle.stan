@@ -1,40 +1,39 @@
-// Poisson "hurdle" model (similar to zero inflation) with 
-// upper truncation
+// Poisson "hurdle" model with upper truncation
 
 data {
-  int<lower=0> N;
+  int<lower=1> N;
   int<lower=0> y[N];
 }
 transformed data {
-  int U; // truncation point
+  int U;
   U = max(y);
 }
 parameters {
-  real<lower=0,upper=1> theta;
-  real<lower=0> lambda;
+  real<lower=0,upper=1> theta; // Pr(y = 0)
+  real<lower=0> lambda; // Poisson parameter if y > 0
 }
 model {
   for (n in 1:N) {
     if (y[n] == 0)
-      target += log(theta); 
+      target += log(theta);  // log(Pr(y = 0))
     else {
-      target += log1m(theta);
-      y[n] ~ poisson(lambda) T[1, U];
+      target += log1m(theta);  // log(Pr(y > 0))
+      y[n] ~ poisson(lambda) T[1,U]; // truncated poisson
     }
   }
 }
 generated quantities {
   int y_rep[N];
-  
   for (n in 1:N) {
     if (bernoulli_rng(theta))
       y_rep[n] = 0;
     else {
-      int x;
-      x = poisson_rng(lambda);
-      while(x == 0 || x > U)
-        x = poisson_rng(lambda);
-      y_rep[n] = x;
+      int w; // temporary variable
+      w = poisson_rng(lambda);
+      while (w == 0 || w > U)
+        w = poisson_rng(lambda);
+        
+      y_rep[n] = w;
     }
   }
 }
