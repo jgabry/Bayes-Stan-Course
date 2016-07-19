@@ -58,6 +58,7 @@ Extract `y_rep` draws from the fitted model object
 ```{r y_rep}
 
 
+# what's the structure of y_rep object?
 ```
 
 Compare histogram of `y` to histograms of several `y_rep`s
@@ -87,7 +88,7 @@ prop_gt_max_y <- # function to compute proportion > max(y)
 
 ### Fit Poisson "hurdle" model with truncation
 
-```{r fit2, results="hide", message=FALSE, warning=FALSE, cache=TRUE}
+```{r fit2, results="hide", message=FALSE, warning=FALSE}
 fit2 <- 
 ```
 
