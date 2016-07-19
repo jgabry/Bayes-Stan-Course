@@ -136,13 +136,11 @@ pred.high[2] <- with(speed_dating,
   mean(attractiveness) + 0.5 * sd(attractiveness))
 
 plogis(crossprod(pred.high, samples[1,])) - plogis(crossprod(pred.low,  samples[1,]))
-## ...
 ```
 
 ```{r high-low-hist}
 hist(plogis(tcrossprod(pred.high, samples)) - plogis(tcrossprod(pred.low,  samples)),
     main = "High/Low Attractiveness", xlab = "Difference in Would-Date Prob")
-## ...
 ```
 
 ## Graphing Fitted Lines
@@ -244,3 +242,36 @@ When the rater is female, however, we have:
     c(1, x, 1, x)
 
 If there are more predictors, the changes need to be propagated wherever we wish to both hold a variable to a constant and wherever we wish to make changes for graphing purposes.
+
+## Generic Model
+
+Coding up a model that includes explicit reference to every parameter can be cumbersome as we expand or change the model. A generic Stan model for logistic regression is:
+
+```{r engine='cat', engine.opts=list(lang = "stan")}
+data {
+  int<lower = 0> N;
+  int<lower = 0> K;
+  int<lower = 0, upper = 1> y[N];
+  
+  matrix[N, K] x;
+}
+parameters {
+  real alpha;
+  vector[K] beta;
+}
+model {
+  y ~ bernoulli_logit(alpha + x * beta);
+  alpha ~ cauchy(0, 10);
+  beta  ~ cauchy(0, 2.5);
+}
+```
+
+This takes data, `x`, in the format of a model matrix and collects the predictors into `beta`. A good way to construct a model matrix from data uses the `model.frame` command with an R formula and extracts the matrix and response from it. For example, the following builds a model matrix for predictign `wouldDate` from `attractiveness`, `ambition`, `isMale`, their two-way interactions, and three way interaction.
+
+```{r model-frame, eval=FALSE}
+mf <- model.frame(wouldDate ~ 0 + attractiveness*ambition*isMale,
+                  speed_dating)
+y <- model.response(mf)
+x <- model.matrix(attr(mf, "terms"), data = mf)
+data <- list(y = y, x = x, N = nrow(x), K = ncol(x))
+```
