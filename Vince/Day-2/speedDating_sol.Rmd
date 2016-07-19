@@ -1,0 +1,246 @@
+---
+title: "Playing with Speed Dating Data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library(rstan)
+options(mc.cores = parallel::detectCores())
+```
+
+## Load and look at the data
+
+```{r load-data}
+speed_dating <- read.csv("speed_dating.csv.gz")
+round(speed_dating[1:3,], 2)
+```
+
+## Setup
+
+* Thousands of undergrad interactions
+* Spend a few minutes, rate other on axes
+* Decide if "would date"
+
+Structure of data:
+
+ * studentId
+ * isMale - person rating
+ * match - person rating and rated both agree
+ * wouldDate - person rating would date
+ * attractiveness - of person _rated_
+ * sincerity
+ * item ...
+
+## Fit simple model
+
+```{r engine='cat', engine.opts=list(file = "mod0.stan", lang = "stan")}
+data {
+  int <lower = 0> N;
+  int <lower = 0, upper = 1> wouldDate[N];
+  
+  vector[N] x_attractiveness;
+  vector[N] x_sincerity;
+  vector[N] x_intelligence;
+  vector[N] x_ambition;
+}
+parameters {
+  real intercept;
+  real attractiveness;
+  real sincerity;
+  real intelligence;
+  real ambition;
+}
+model {
+  wouldDate ~ bernoulli_logit(intercept +
+                              x_attractiveness * attractiveness +
+                              x_sincerity * sincerity +
+                              x_intelligence * intelligence +
+                              x_ambition * ambition);
+  intercept      ~ cauchy(0, 10);
+  attractiveness ~ cauchy(0, 2.5);
+  sincerity      ~ cauchy(0, 2.5);
+  intelligence   ~ cauchy(0, 2.5);
+  ambition       ~ cauchy(0, 2.5);
+}
+```
+
+```{r fit-simple-logit, results="hide"}
+## pull out and rename covariates
+data <- as.list(speed_dating[c(
+  "attractiveness", "sincerity",
+  "intelligence",   "ambition")])
+
+## rename to match model
+names(data) <- paste0("x_", names(data))
+data$wouldDate <- speed_dating$wouldDate
+data$N <- nrow(speed_dating)
+
+
+fit1 <- stan("mod0.stan", data = data)
+```
+```{r print-simple-logit-fit}
+fit1
+```
+
+## Exercise: Posterior Probabilities
+
+Compute the posterior probability that attractiveness is unimportant (has a slope less than or equal to 0)
+
+```{r post-prob}
+samples <- as.matrix(fit1)[,1:5] ## throw out __lp
+mean(samples[,"attractiveness"] <= 0)
+```
+
+Plot a histogram of the posterior of attractiveness
+
+```{r post-hist}
+hist(samples[,"attractiveness"], main = "Posterior Distribution", xlab = "Attractiveness")
+```
+
+## Making Predictions
+
+Predictions from a fitted logistic regression require holding most predictors at particular values while varying the others.
+
+```{r post-pred}
+testVal <- with(speed_dating,
+   mean(attractiveness) + sd(attractiveness))
+
+pred <- c(1,       # intercept
+          testVal, # attractiveness
+          mean(speed_dating$sincerity),
+          mean(speed_dating$intelligence),
+          mean(speed_dating$ambition))
+## x_i' * beta
+## samples[1,] gets converted into a column
+crossprod(pred, samples[1,])
+```
+
+This quantity is on a linear scale, apply `plogis` to get on probability scale.
+
+## Exercise: Making Predictions
+
+What is the difference in probability of being dateable between two otherwise average individuals who differ in attractiveness by being one half standard deviation above and one half standard deviation below the mean?
+
+Calculate first a single value, then plot the posterior distribution of estimated differences.
+
+```{r high-low-pred}
+pred.low  <- pred
+pred.high <- pred
+pred.low[2]  <- with(speed_dating,
+  mean(attractiveness) - 0.5 * sd(attractiveness))
+pred.high[2] <- with(speed_dating,
+  mean(attractiveness) + 0.5 * sd(attractiveness))
+
+plogis(crossprod(pred.high, samples[1,])) - plogis(crossprod(pred.low,  samples[1,]))
+## ...
+```
+
+```{r high-low-hist}
+hist(plogis(tcrossprod(pred.high, samples)) - plogis(tcrossprod(pred.low,  samples)),
+    main = "High/Low Attractiveness", xlab = "Difference in Would-Date Prob")
+## ...
+```
+
+## Graphing Fitted Lines
+
+Move our "test value" sequentially through range and collect predictions. We can do so for a single draw from the posterior as follows:
+
+```{r graphing}
+xRange <- range(speed_dating$attractiveness)
+
+n.vals <- 101
+xVals <- seq(xRange[1], xRange[2], length.out = 101)
+
+## march through values, get prediction
+yVals <- rep(NA, n.vals)
+for (i in seq_len(n.vals)) {
+  pred[2] <- xVals[i]
+  yVals[i] <- plogis(crossprod(pred, samples[1,]))
+}
+
+## draw observed points
+with(speed_dating,
+  plot(attractiveness, wouldDate, pch = 20,
+       main = "Single Draw", xlab = "attractiveness", ylab = "Prob Would Date"))
+## connect predictions with lines
+lines(xVals, yVals)
+```
+
+## Posterior Uncertainty in Fitted Lines
+
+Because Stan gives us a whole collection of samples from the posterior, we can show both our posterior mean and the uncertainty in the fit by drawing multiple lines.
+
+```{r graphing-uncertainty}
+n.fits <- 20
+
+with(speed_dating,
+  plot(attractiveness, wouldDate, pch = 20,
+       main = "Posterior Uncertainty", xlab = "attractiveness", ylab = "Prob Would Date"))
+
+## repeat the above 20 times
+for (j in seq_len(n.fits)) {
+  yVals <- rep(NA, n.vals)
+   for (i in seq_len(n.vals)) {
+    pred[2] <- xVals[i]
+    yVals[i] <- plogis(crossprod(pred, samples[j,]))
+  }
+  lines(xVals, yVals, col = "gray")
+}
+for (i in seq_len(n.vals)) {
+  pred[2] <- xVals[i]
+  yVals[i] <- plogis(crossprod(pred, apply(samples, 2, mean)))
+}
+lines(xVals, yVals)
+```
+
+## Exercise: Posterior Uncertainty in Fitted Lines
+
+Produce a similar plot for another coefficient
+
+```{r graphing-uncertainty-exercise}
+pred[2] <- mean(speed_dating$attractiveness)
+
+xRange <- range(speed_dating$sincerity)
+
+n.vals <- 101
+xVals <- seq(xRange[1], xRange[2], length.out = 101)
+n.fits <- 20
+
+with(speed_dating,
+  plot(sincerity, wouldDate, pch = 20,
+       main = "Posterior Uncertainty", xlab = "sincerity", ylab = "Prob Would Date"))
+
+for (j in seq_len(n.fits)) {
+  yVals <- rep(NA, n.vals)
+  for (i in seq_len(n.vals)) {
+    pred[3] <- xVals[i]
+    yVals[i] <- plogis(crossprod(pred, samples[j,]))
+  }
+  lines(xVals, yVals, col = "gray")
+}
+for (i in seq_len(n.vals)) {
+  pred[3] <- xVals[i]
+  yVals[i] <- plogis(crossprod(pred, apply(samples, 2, mean)))
+}
+lines(xVals, yVals)
+```
+
+## Concluding Thoughts
+
+Prediction code can be cleaned up significantly by turning into functions. Predictions themselves gets significantly harder if the model include interactions. E.g. suppose we have the model
+
+    wouldDate ~ bernoulli_logit(intercept + attractiveness + isMale + attractiveness * isMale)
+
+To obtain predictions for when the rater is female, we can set `isMale` to 0, so the predictor vector becomes:
+
+    c(1, x, 0, 0)
+
+When the rater is female, however, we have:
+
+    c(1, x, 1, x)
+
+If there are more predictors, the changes need to be propagated wherever we wish to both hold a variable to a constant and wherever we wish to make changes for graphing purposes.
