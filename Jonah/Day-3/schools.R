@@ -34,7 +34,8 @@ ncp_mod <- stan_model("schools_ncp.stan")
 # Sample from posteriors --------------------------------------------------
 standata <- list(y = y, sigma = sigma, J = length(y))
 cp_fit1 <- sampling(cp_mod, data = standata, seed = SEED)
-ncp_fit1 <- sampling(ncp_mod, data = standata, seed = SEED)
+ncp_fit1 <- sampling(ncp_mod, data = standata, seed = SEED, 
+                     control = list(stepsize = 0.01, adapt_delta = 0.9))
 
 # cp has problems with divergences, low effective sample sizes (high
 # autocorrelations)
@@ -51,6 +52,7 @@ mcmc_pairs(as.matrix(ncp_fit1), pars = c("lp__", "tau"))
 # Suppose y is scaled up by factor of 10 (without changing sigma)
 standata2 <- standata
 standata2$y <- 10 * standata2$y
+
 cp_fit2 <- sampling(cp_mod, data = standata2, seed = SEED)
 ncp_fit2 <- sampling(ncp_mod, data = standata2, seed = SEED)
 
@@ -66,7 +68,8 @@ mcmc_pairs(as.matrix(ncp_fit2), pars = c("lp__", "tau"))
 standata3 <- standata2
 standata3$sigma <- 10 * standata3$sigma
 cp_fit3 <- sampling(cp_mod, data = standata3, seed = SEED)
-ncp_fit3 <- sampling(ncp_mod, data = standata3, seed = SEED)
+ncp_fit3 <- sampling(ncp_mod, data = standata3, seed = SEED, 
+                     control = list(stepsize = 0.01, adapt_delta = 0.95))
 
 # If sigma is also scaled up with y then ncp is better again
 launch_shinystan(cp_fit3) 

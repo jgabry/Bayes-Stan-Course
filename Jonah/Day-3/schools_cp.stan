@@ -11,15 +11,15 @@ parameters {
   vector[J] theta;
   
   // "global" parameters
-  real mu;
-  real<lower=0> tau;
+  real mu; // mean
+  real<lower=0> tau; // sd
 }
 model {
   // Data model
   y ~ normal(theta, sigma);
   
   // Priors 
-  theta ~ normal(mu, tau); 
+  theta ~ normal(mu, tau);
   tau ~ cauchy(0, 10);
   // can also put prior on mu
 }
