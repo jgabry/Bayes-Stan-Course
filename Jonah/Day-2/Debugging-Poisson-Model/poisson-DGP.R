@@ -3,7 +3,7 @@
 set.seed(223)
 
 lambda <- 5 # poisson parameter
-theta <- 0.2 # Pr(0)
+theta <- 0.2 # Pr(y = 0)
 U <- 7 # truncation point
 N <- 500 # sample size 
 
