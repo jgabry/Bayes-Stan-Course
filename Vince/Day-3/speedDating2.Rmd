@@ -1,0 +1,184 @@
+---
+title: "Playing with Speed Dating Data Pt 2: MLM"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+par(mar = c(2.5, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
+```
+
+```{r load-packages, message=FALSE, warning=FALSE, echo=FALSE}
+library(rstan)
+options(mc.cores = parallel::detectCores())
+```
+
+## Loading the Data
+
+This time around we're going to fit a multilevel model that includes a random intercept for each subject. These (latent) parameters measure each participants' a natural baseline of "pickiness" that determines their willingness to date. To keep things simple, we'll fit a separate model to the male and female subjects, but the model could definitely be made more complex and their estimates pooled.
+
+```{r load-data}
+speed_dating <- read.csv("speed_dating.csv.gz")
+
+male_data   <- subset(speed_dating, isMale == 1)
+female_data <- subset(speed_dating, isMale == 0)
+```
+
+## Stan Model
+
+We're going to start with a simple Stan model for a generalized linear, hierarchical model for Bernoulli data using a logistic link function and contains only a varying intercept for each individual.
+
+```{r engine='cat', engine.opts=list(file = "mlm_logit.stan", lang = "stan")}
+data {
+  int<lower = 0> N; // num obs
+  int<lower = 0> K; // num indiv-level predictors
+  int<lower = 0> J; // num groups
+  
+  int<lower = 0, upper = 1> y[N];
+  int<lower = 1, upper = J> g[N]; // group indices
+  matrix[N,K] x;
+}
+parameters {
+  real alpha;
+  vector[K] beta;
+  
+  vector[J] gamma;
+  real<lower = 0> sigma_gamma;
+}
+model {
+  y ~ bernoulli_logit(alpha + x * beta + gamma[g]);
+  gamma ~ normal(0, sigma_gamma);
+  
+  alpha ~ cauchy(0, 10);
+  beta  ~ cauchy(0, 2.5);
+  sigma_gamma ~ gamma(1.5, 0.5);
+}
+```
+
+## Preparing Data
+
+Next up, we extract data from the data frame in a format that Stan can use (i.e. a matrix). This step is a little more complicated than it needs to be, as the code generalizes nicely to more complicated models with interactions. If we had more than one grouping factor, we can something like `glmer` in the `lme4` package to do this for us, or more realistically we can just fit a Bayesian version directly by using `rstanarm`.
+
+```{r data-preparation}
+mf <- model.frame(wouldDate ~ 0 + attractiveness + sincerity +
+                  intelligence + fun + ambition + sharedInterest +
+                  studentId, male_data)
+
+y <- model.response(mf)
+x <- model.matrix(attr(mf, "terms"), mf)
+g <- x[,"studentId"]
+
+data <- list(y = y,
+             ## remove studentId from x
+             x = x[,-which(colnames(x) == "studentId")],
+             ## shift g so that it operates as indices (starts at 1, ...)
+             g = match(g, unique(g)),
+             N = length(y),
+             K = ncol(x) - 1,
+             J = length(unique(g)))
+```
+
+Our model first appears in the call to `model.frame`, that is we are going to estimate
+
+$$ P(\text{wouldDate}_{ij} = 1 \mid \cdot) = \mathrm{logit}^{-1}(\text{intercept} + \text{attractiveness}_{ij} + \cdots + \text{intercept for student}_j) $$
+
+where we now need a $j$ index to go through individuals.
+
+## Fitting the Model
+
+```{r model-fitting}
+male_fit <- stan("mlm_logit.stan", data = data)
+print(male_fit, pars = c("alpha", "beta"))
+```
+
+## Varying Intercepts
+
+`alpha` and `beta` are as in a non-hierarchical generalized linear model, namely the baseline "intercept" and the slopes contributed by the various predictors. `gamma` are the offsets for each student. Occasionally, the varying slopes are "nuisance parameters" and are simply added to account for variation at a group level. Often, they are of interest themselves.
+
+```{r looking-at-intercepts}
+gamma_rep <- as.matrix(male_fit, pars = "gamma")
+dim(gamma_rep)
+data$J
+```
+
+We can examine the samples of any one person's offset by indexing into `gamma_rep`. For example, the marginal distributions of the first 6 students' is shown by:
+
+```{r looking-at-intercepts-2}
+par(mfrow = c(2, 3))
+for (i in 1:6)
+  hist(gamma_rep[,i], xlim = range(gamma_rep[,1:6]), breaks = 8,
+       main = paste0("Post Dist Offset Student ", i), xlab = "gamma")
+```
+
+## Exercise: Intercept Posterior Distributions
+
+It looks as if there is a fair bit of variation in students' baseline preferences. This can be visualized by summarizing the marginal posteriors of all `r data$J` offsets and calculating their posterior means, which have their own distribution distribution. Plot a histogram of these means:
+
+```{r posterior-means-dist}
+gamma_means <- apply(gamma_rep, 2, mean)
+length(gamma_means) ## should be equal number of students
+## ...
+```
+
+Further, the 6 distributions above are all *marginal* posteriors. Modify the histogram code to create scatter plots of the joint posteriors between $\gamma_1$ and $\gamma_2$ through $\gamma_7$.
+
+```{r posterior-scatter-plots}
+par(mfrow = c(2, 3))
+for (i in 1:6)
+  ## plot(gamma_rep[,1], ...)
+  {} ## empty line to get file to compile
+```
+
+## Predictions for Individuals
+
+If we have a specific individual in mind, making predictions for that individual is accomplished by adding their offset to the linear predictor, composed when making predictions in non-hierarchical multilevel models. In that case, as in here, we need to setup a vector that represents the point at which we want predictions. We start by considering a collection of individuals who are otherwise completely average but differ in their attractiveness.
+
+```{r posterior-predictions}
+## merge pars into 'beta' for convenience 
+beta_rep <- as.matrix(male_fit, pars = c("alpha", "beta"))
+
+xRange <- range(male_data$attractiveness)
+n.vals <- 101
+x.predict <- c(1, colMeans(data$x))
+xVals <- seq(xRange[1], xRange[2], length.out = n.vals)
+
+## do everything in matrices this time
+
+## this duplicates the x.predict vector into a matrix with
+## identical columns; check by doing x.predict[,1:3]
+x.predict <- matrix(x.predict, length(x.predict), n.vals)
+rownames(x.predict) <- c("(Intercept)", colnames(data$x))
+
+## set the attractiveness row of x.predict to our new values
+x.predict["attractiveness",] <- xVals
+
+## x.predict should be 7 x 101, beta_rep is 4000 x 7, so
+lin.pred_rep <- beta_rep %*% x.predict
+
+## now add offset for first person, will get added as a column
+## to each column
+lin.pred_rep <- lin.pred_rep + gamma_rep[,1]
+
+## now convert to probabilities and take an average
+probs <- apply(plogis(lin.pred_rep), 2, mean)
+
+plot(male_data$attractiveness, y, pch = 20,
+     xlab = "attractiveness", ylab = "Prob Would Date",
+     main = "Student 1")
+lines(xVals, probs, type = "l")
+```
+
+This shows just the posterior mean for the first individual, but not the uncertainty in the estimation. Modify the above to plot 20 lines in gray corresponding to 20 of the posterior samples, as well as the posterior mean.
+
+```{r posterior-predictive-uncertainty}
+## lin.pred_rep remains valid, what is required is to calculate 20 sets of probs and
+## use those to plot 20 sets of lines
+```
+
+## Further Exercises
+
+The above exercise shows just the variability in the fit for first student. Plotting a number of these side-by-side illustrates the variation between and within students all at once. Also of interest are predictions for *new* students. These can be obtained by taking draws from the distribution
+
+$$p(\gamma^* \mid y) = \int p(\gamma^* \mid \sigma_\gamma) p(\sigma_\gamma \mid y) \,\mathrm{d}\gamma$$
+
+which is done by using a sample of `sigma_gamma` (from $p(\sigma_\gamma \mid y)$) and simulating a normal random variable with the standard deviation ($p(\gamma^* \mid \sigma_\gamma)$).
