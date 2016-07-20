@@ -116,7 +116,7 @@ It looks as if there is a fair bit of variation in students' baseline preference
 ```{r posterior-means-dist}
 alpha_means <- apply(alpha_rep, 2, mean)
 length(alpha_means) ## should be equal number of students
-## ...
+hist(alpha_means, main = "Posterior Averages", xlab = expression(bar(alpha)))
 ```
 
 Further, the 6 distributions above are all *marginal* posteriors. Modify the histogram code to create scatter plots of the joint posteriors between $\alpha_1$ and $\alpha_2$ through $\alpha_7$.
@@ -124,9 +124,9 @@ Further, the 6 distributions above are all *marginal* posteriors. Modify the his
 ```{r posterior-scatter-plots}
 par(mfrow = c(2, 3))
 for (i in 2:7)
-  ## plot(alpha_rep[,1],
-  ## ...
-  {} ## empty braces just to get file to compile, replace later
+  plot(alpha_rep[,1], alpha_rep[,i], ylim = range(alpha_rep[,1:6]),
+       main = "Joint Posterior",
+       xlab = "Intercept 1", ylab = paste0("Intercept ", i))
 ```
 
 ## Predictions for Individuals
@@ -173,7 +173,16 @@ This shows just the posterior mean for the first individual, but not the uncerta
 ## lin.pred_rep remains valid, what is required is to calculate 20 sets of probs and
 ## use those to plot 20 sets of lines
 
-## ...
+## put a plot out in front
+plot(male_data$attractiveness, y, pch = 20,
+     xlab = "attractiveness", ylab = "Prob Would Date",
+     main = "Student 1")
+for (i in 1:20) {
+  probs.i <- plogis(lin.pred_rep)[i,]
+  lines(xVals, probs.i, col = "gray")
+}
+probs <- apply(plogis(lin.pred_rep), 2, mean)
+lines(xVals, probs)
 ```
 
 ## Further Exercises
