@@ -72,7 +72,7 @@ data {
 }
 parameters {
   simplex[K] lambda;
-  int z[K];
+  int z[N];
   
   real[K] mu;
   real<lower = 0> sigma[K];

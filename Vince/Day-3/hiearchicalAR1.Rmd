@@ -114,36 +114,36 @@ sigma_y_rep <- samples[,"sigma_y"]
 
 ```{r }
 par(mfrow=c(2, 4), mar = c(2.5, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
-for (i in 1:J) {
-  beta_rep  <- samples[,paste0("beta[", i, "]")]
+for (j in 1:J) {
+  beta_rep  <- samples[,paste0("beta[", j, "]")]
   
   y_pred_rep <- matrix(0, nrow(samples), T)
   y_pred_rep[,1] <- y[,1]
   for (t in 2:T)
     y_pred_rep[,t] <- gamma_rep * y_pred_rep[,t - 1] + beta_rep * (t - 1)
   
-  plot(1:T, y[i,], type = "n", ylim = range(y), xlim = c(1, T), xlab = "time", ylab = "y",
-       main = paste0("Individual ", i, " Est"))
-  for (j in 1:20)
-    lines(1:T, y_pred_rep[j,], col = "gray")
-  lines(1:T, y[i,])
+  plot(1:T, y[j,], type = "n", ylim = range(y), xlim = c(1, T), xlab = "time", ylab = "y",
+       main = paste0("Individual ", j, " Est"))
+  for (k in 1:20)
+    lines(1:T, y_pred_rep[k,], col = "gray")
+  lines(1:T, y[j,])
 }
 ```
 
 ```{r ppd}
 par(mfrow=c(2, 4), mar = c(2.5, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
-for (i in 1:J) {
-  beta_rep  <- samples[,paste0("beta[", i, "]")]
+for (j in 1:J) {
+  beta_rep  <- samples[,paste0("beta[", j, "]")]
   
   y_pred_rep <- matrix(0, nrow(samples), T)
   y_pred_rep[,1] <- y[,1]
   for (t in 2:T)
     y_pred_rep[,t] <- gamma_rep * y_pred_rep[,t - 1] + beta_rep * (t - 1) + rnorm(J, 0, sigma_y_rep)
   
-  plot(1:T, y[i,], type = "n", ylim = range(y), xlim = c(1, T), xlab = "time", ylab = "y",
-       main = paste0("Individual ", i, " PPD"))
-  for (j in 1:20)
-    lines(1:T, y_pred_rep[j,], col = "gray")
-  lines(1:T, y[i,])
+  plot(1:T, y[j,], type = "n", ylim = range(y), xlim = c(1, T), xlab = "time", ylab = "y",
+       main = paste0("Individual ", j, " PPD"))
+  for (k in 1:20)
+    lines(1:T, y_pred_rep[k,], col = "gray")
+  lines(1:T, y[j,])
 }
 ```
