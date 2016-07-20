@@ -1,0 +1,149 @@
+---
+title: "Hierarchical AR1 Model"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+par(mar = c(2.5, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
+```
+
+```{r load-packages, message=FALSE, warning=FALSE, echo=FALSE}
+library(rstan)
+options(mc.cores = parallel::detectCores())
+```
+
+## Model
+
+An AR1 model is given by, for $t=2, \ldots, T$
+
+$$ y_t \mid y_{t - 1} \sim \mathrm{Normal}(\alpha + \gamma y_{t-1}, \sigma^2), $$
+
+with $\gamma \in (-1, 1)$. $y_1$ is arbitrary and unmodeled. We expand this to "panel data", by including a random slope element for a sequence of individuals. For simplicity, we also drop $\alpha$. That leaves
+
+$$ y_{j,t} \mid y_{j,t - 1} \sim \mathrm{Normal}(\gamma y_{t-1} + \beta_j (t - 1), \sigma^2). $$
+
+## Simulated Data
+
+We can simulate data by picking a few arbitrary values for the parameters.
+
+```{r data-simulation}
+J <- 8
+T <- 25
+N <- J * T
+
+sigma.beta  <- 1 / 4
+beta  <- rnorm(J, 0, sigma.beta)
+
+gamma <- 0.5
+sigma.y <- 2
+
+y <- matrix(0, J, T)
+y[,1] <- 0 ## center within-individuals
+for (t in 2:T)
+  y[,t] <- rnorm(J, gamma * y[,t - 1] + beta * (t - 1), sigma.y)
+```
+
+To visualize:
+
+```{r data-visualization}
+par(mfrow=c(2, 4), mar = c(2.5, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
+for (i in 1:J) {
+  plot(1:T, y[i,], type = "l", ylim = range(y), xlab = "time", ylab = "y",
+       main = paste0("Individual ", i))
+}
+```
+
+## Stan Model
+
+The Stan model very closely matches the generative one, with the addition of priors.
+
+```{r engine='cat', engine.opts=list(file = "mlm_ts.stan", lang = "stan")}
+data {
+  int<lower = 0> J;
+  int<lower = 0> T;
+  
+  matrix[J,T] y;
+}
+parameters {
+  real<lower = -1, upper = 1> gamma;
+  real<lower = 0> sigma_y;
+  real<lower = 0> sigma_beta;
+  
+  vector[J] beta; // random slopes for each individual
+}
+model {
+  for (t in 2:T)
+    y[,t] ~ normal(gamma * y[,t - 1] + beta * (t - 1.0), sigma_y);
+  beta ~ normal(0, sigma_beta);
+  
+  
+  sigma_y ~ cauchy(0, 5);
+  sigma_beta ~ cauchy(0, 5);
+  
+  target += beta_lpdf((gamma + 1) / 2 | 1.1, 1.1); // + log(1/2) from c.o.v.
+}
+```
+
+The only new trick here is that we impose a beta prior on $\gamma$, but beta distributions have support on $[0, 1]$. Consequently, we adjust the location and scale and obtain the distribution:
+
+```{r beta-prior}
+par(mar = c(2.5, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
+curve(dbeta(0.5 * (x + 1), 1.1, 1.1) / 2, -1, 1, main = "Adj-Beta Prior", xlab = expression(gamma))
+```
+
+The extra $1/2$ is to account for the Jacobian (here just a derivative) that arises from a change of variables and is required for the distribution to integrate to 1. Stan operates on an unnormalized log posterior, so it can be ommitted.
+
+```{r fit}
+data <- list(J = J, T = T, y = y)
+ts_fit1 <- stan("mlm_ts.stan", data = data)
+
+print(ts_fit1, pars = c("sigma_beta", "gamma", "sigma_y"))
+
+plot(ts_fit1, pars = c("sigma_beta", "gamma", "sigma_y"))
+```
+
+We can pull out predictions from the model by recreating the AR process using simulated parameters. Adding noise gives the posterior predictive distribution.
+
+```{r inference}
+samples <- as.matrix(ts_fit1)
+
+gamma_rep <- samples[,"gamma"]
+sigma_y_rep <- samples[,"sigma_y"]
+```
+
+```{r }
+par(mfrow=c(2, 4), mar = c(2.5, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
+for (i in 1:J) {
+  beta_rep  <- samples[,paste0("beta[", i, "]")]
+  
+  y_pred_rep <- matrix(0, nrow(samples), T)
+  y_pred_rep[,1] <- y[,1]
+  for (t in 2:T)
+    y_pred_rep[,t] <- gamma_rep * y_pred_rep[,t - 1] + beta_rep * (t - 1)
+  
+  plot(1:T, y[i,], type = "n", ylim = range(y), xlim = c(1, T), xlab = "time", ylab = "y",
+       main = paste0("Individual ", i, " Est"))
+  for (j in 1:20)
+    lines(1:T, y_pred_rep[j,], col = "gray")
+  lines(1:T, y[i,])
+}
+```
+
+```{r ppd}
+par(mfrow=c(2, 4), mar = c(2.5, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
+for (i in 1:J) {
+  beta_rep  <- samples[,paste0("beta[", i, "]")]
+  
+  y_pred_rep <- matrix(0, nrow(samples), T)
+  y_pred_rep[,1] <- y[,1]
+  for (t in 2:T)
+    y_pred_rep[,t] <- gamma_rep * y_pred_rep[,t - 1] + beta_rep * (t - 1) + rnorm(J, 0, sigma_y_rep)
+  
+  plot(1:T, y[i,], type = "n", ylim = range(y), xlim = c(1, T), xlab = "time", ylab = "y",
+       main = paste0("Individual ", i, " PPD"))
+  for (j in 1:20)
+    lines(1:T, y_pred_rep[j,], col = "gray")
+  lines(1:T, y[i,])
+}
+```

@@ -1,0 +1,151 @@
+---
+title: "Fitting a Mixture Model"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+```
+
+```{r load-packages, echo=FALSE, message=FALSE, warning=FALSE}
+library(rstan)
+options(mc.cores = parallel::detectCores())
+```
+
+## Data Generation
+
+We start by simulating data from a completely arbitrary distribution.
+
+```{r code-generation}
+## mixing parameters
+p1 <- 0.2
+p2 <- 0.5
+p3 <- 1 - p1 - p2
+
+## parameters of individual distributions
+mu1 <- 4.5
+sigma1 <- 0.1
+mu2 <- 2
+sigma2 <- 0.75
+mu3 <- 7
+sigma3 <- 1.25
+
+## random number generator
+r <- function(n) {
+  sapply(seq_len(n), function(i) {
+    class <- sample(3, 1, prob = c(p1, p2, p3))
+    if (class == 1) { rnorm(1, mu1, sigma1) }
+    else if (class == 2) { rnorm(1, mu2, sigma2) }
+    else { rnorm(1, mu3, sigma3) }
+  })
+}
+## density
+d <- function(x) {
+  p1 * dnorm(x, mu1, sigma1) + p2 * dnorm(x, mu2, sigma2) + p3 * dnorm(x, mu3, sigma3)
+}
+
+N <- 200
+y <- r(N)
+data <- list(y = y - mean(y), N = N, K = 3)
+```
+
+To visualize, we plot a few samples and curve the density
+
+```{r data-vis, echo=FALSE}
+par(mfrow = c(1, 2), mar = c(2.5, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
+hist(r(500), breaks = 20, xlab = "x", main = "Histogram")
+#xVals <- c(seq(-0.5, mu1, length.out = 51), seq(mu1, 10.5, length.out = 51)[-1])
+xVals <- seq(-0.5, 10.5, length.out = 101)
+plot(xVals, d(xVals), type = "l", xlab = "x", ylab = "Density", main = "pdf")
+```
+
+## Model Fitting
+
+We first try to fit a model in Stan directly corresponding to the data generating process.
+
+```{r stan-fit, eval=FALSE}
+test_code <- "
+data {
+  int<lower = 0> N;
+  int<lower = 0> K;
+  real y[N];
+}
+parameters {
+  simplex[K] lambda;
+  int z[K];
+  
+  real[K] mu;
+  real<lower = 0> sigma[K];
+}
+model {
+  z ~ categorical(lambda);
+  for (n in 1:n)
+    y[n] ~ normal(mu[z[n]], sigma[z[n]])
+}
+"
+
+fit1 <- stan(model_code = test_code, data = data)
+```
+
+```{r stan-fit2, echo=FALSE, error=TRUE}
+errorMessage <- "integer parameters or transformed parameters are not allowed;  found declared type int, parameter name=z\nProblem with declaration."
+stop(errorMessage)
+```
+
+## Marginal Model
+
+We sum/integrate out the latent class variables to obtain a model that does not have discrete parameters. At the same time, include priors on the unknown parameters to help their identification.
+
+```{r engine='cat', engine.opts=list(file = "mm_mod.stan", lang = "stan")}
+data {
+  int <lower = 0> N;
+  int <lower = 0> K;
+  real y[N];
+}
+parameters {
+  simplex[K] lambda;
+  vector[K] mu;
+  vector<lower = 0>[K] sigma;
+}
+model {
+  for (n in 1:N) {
+    vector[K] indivProbs;
+    for (k in 1:K) {
+      indivProbs[k] = log(lambda[k]) +
+                        normal_lpdf(y[n] | mu[k], sigma[k]);
+    }
+    target += log_sum_exp(indivProbs);
+  }
+  mu ~ cauchy(0, 10);
+  sigma ~ cauchy(0, 5);
+}
+generated quantities {
+  matrix[N, K] classProbs;
+  
+  for (n in 1:N) {
+    vector[K] indivProbs;
+    for (k in 1:K) {
+      indivProbs[k] = log(lambda[k]) + normal_lpdf(y[n] | mu[k], sigma[k]);
+    }
+    classProbs[n,] = softmax(indivProbs)';
+  }
+}
+```
+
+```{r fit-mm, results="hide"}
+mm_fit <- stan("mm_mod.stan", data = data)
+print(mm_fit, pars = c("lambda", "mu", "sigma"))
+```
+
+The class with the highest posterior probability of membership for any observation becomes our prediction of its class. We can put these together to label each data point. In this case, we plot all the data along a single axis and add some random noise to aid with differentiation. Class memberships appear as colors.
+
+```{r post-classes}
+probs <- extract(mm_fit, "classProbs")[[1]]
+meanProbs <- apply(probs, c(2, 3), mean)
+classEstimates <- apply(meanProbs, 1, which.max)
+
+par(mar = c(2.5, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
+plot(data$y, runif(length(data$y), -0.15, 0.15), pch = 20, col = classEstimates,
+     ylim = c(-1, 1),
+     ylab = "jitter", xlab = "y", main = "Estimated Class Memberships")
+```
