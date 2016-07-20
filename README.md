@@ -2,22 +2,8 @@
 Bayes/Stan Short Course NYC
 
 
-### Some things to install
+### How to get in touch after the course
 
-During one of the breaks before the afternoon session, please run the following code in R to install a few things we'll use later:
-
-```r
-# install 'devtools' and then 'bayesplot'
-if (!require("devtools")) install.packages("devtools")
-library("devtools")
-install_github("jgabry/bayesplot")
-
-# also install 'shinystan'
-install.packages("shinystan")
-```
-
-### RStudio preview version 
-
-RStudio has syntax highlighting for Stan programs, but if you want to get Stan syntax highlighting for the _latest_ version of Stan, you can install the preview version of RStudio from here:
-
-http://www.rstudio.com/products/rstudio/download/preview
+* Jonah: jsg2201@columbia.edu
+* Vince: vjd4@nyu.edu
+* [Stan-users group](https://groups.google.com/forum/#!forum/stan-users) is the best place to get help (from Stan developers and other users) with Stan and statistical modeling statistics questions
