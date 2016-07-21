@@ -66,6 +66,15 @@ I haven't read this, but the latest edition also includes content on Stan
 * [Doing Bayesian Data Analysis](https://sites.google.com/site/doingbayesiandataanalysis/)
 
 
+# Choosing priors
+
+We have a very informal wiki page on GitHub with a collection of thoughts
+on choosing prior distributions. Unfortunately it's not very user-friendly
+(e.g. hard to search) in its current state, but we're hoping to turn it
+into something much more organized at some point.
+
+* [Prior choice recommendations](https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations)
+
 
 # Model comparison and variable selection
 
