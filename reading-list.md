@@ -5,20 +5,20 @@ output:
     toc: yes
 ---
 
-# Reproducible research using Stan
+## Reproducible research using Stan
 
 There was actually a recent blog post about this:
 
 * [Reproducible Research with Stan, R, knitr, Docker, and Git (with free GitLab hosting)](http://andrewgelman.com/2016/07/07/reproducible-research-with-stan-and-docker-with-free-gitlab-hosting/)
 
-# Stan tutorials
+## Stan tutorials
 
 There are various tutorials available on the [Stan website](http://mc-stan.org/documentation)
 and include tutorials on modern Bayesian tools for time series analysis,
 an intro to Stan for economists. Some of these are written documents and
 there are also some videos.
 
-# Stan case studies
+## Stan case studies
 
 These are all available at the [Stan website](http://mc-stan.org/documentation/case-studies.html). Here's a sample
 of the available case studies (there are a lot more than this):
@@ -30,7 +30,7 @@ of the available case studies (there are a lot more than this):
 * [_Soil Carbon Modeling_](http://mc-stan.org/documentation/case-studies/soil-knit.html)
 
 
-# Introductory-level books
+## Introductory-level books
 
 #### McElreath
 
@@ -66,7 +66,7 @@ I haven't read this, but the latest edition also includes content on Stan
 * [Doing Bayesian Data Analysis](https://sites.google.com/site/doingbayesiandataanalysis/)
 
 
-# Choosing priors
+## Choosing priors
 
 We have a very informal wiki page on GitHub with a collection of thoughts
 on choosing prior distributions. Unfortunately it's not very user-friendly
@@ -76,7 +76,7 @@ into something much more organized at some point.
 * [Prior choice recommendations](https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations)
 
 
-# Model comparison and variable selection
+## Model comparison and variable selection
 
 Some (freely available) papers written (or recommended) by various members of
 the Stan team:
@@ -87,13 +87,13 @@ can be used with models fit using `rstan`)
 `rstanarm` package soon)
 * [Projection predictive model selection for Gaussian processes](http://arxiv.org/abs/1510.04813)
 
-# Papers Using Stan
+## Papers using Stan
 
 For a (not nearly exhaustive) sample of how Stan is being used by researchers
 in various fields check out the **Papers Using Stan** section at http://mc-stan.org/citations/.
 
 
-# Stan-related R packages
+## Stan-related R packages
 
 #### Written & maintained by Stan developers
 * [`rstan`](http://mc-stan.org/interfaces/rstan.html) (R interface to Stan)
@@ -109,7 +109,7 @@ I think there are more than just these two, but I think these are the most devel
 * [`rethinking`](https://github.com/rmcelreath/rethinking)
 
 
-# Hamiltonian Monte Carlo (HMC) in depth
+## Hamiltonian Monte Carlo (HMC) in depth
 
 #### Radford Neal's intro to HMC
 
