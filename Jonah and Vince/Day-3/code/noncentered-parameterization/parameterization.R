@@ -19,7 +19,7 @@ sigma <- c(15, 10, 16, 11,  9, 11, 10, 18)
 
 # Plot the data ---------------------------------------------------------
 ggplot(data.frame(x = factor(1:length(y)), y, sigma), aes(x,y)) +
-  geom_hline(yintercept = 0, col = "maroon", linetype = 2) +
+  geom_hline(yintercept = 0, col = "#A25050", linetype = 2) +
   geom_pointrange(aes(ymin = y - sigma, ymax = y + sigma)) + 
   labs(y = expression(y %+-% sigma), x = NULL) +
   scale_x_discrete(labels = paste0("y[", 1:length(y), "]")) +
@@ -35,18 +35,27 @@ ncp_mod <- stan_model("schools_ncp.stan")
 standata <- list(y = y, sigma = sigma, J = length(y))
 cp_fit1 <- sampling(cp_mod, data = standata, seed = SEED)
 ncp_fit1 <- sampling(ncp_mod, data = standata, seed = SEED, 
-                     control = list(stepsize = 0.01, adapt_delta = 0.9))
+                     control = list(adapt_delta = 0.95))
 
 # cp has problems with divergences, low effective sample sizes (high
 # autocorrelations)
 launch_shinystan(cp_fit1) 
 
-# ncp largely resolves these problems
+# ncp resolves these problems
 launch_shinystan(ncp_fit1)
 
 # Can also see the different geometry in pairs plot
+mcmc_pairs(as.matrix(cp_fit1), pars = c("theta[1]", "tau"), 
+           transformations = list(tau = log))
+mcmc_pairs(as.matrix(ncp_fit1), pars = c("theta_raw[1]", "tau"), 
+           transformations = list(tau = log))
+
 mcmc_pairs(as.matrix(cp_fit1), pars = c("lp__", "tau"))
 mcmc_pairs(as.matrix(ncp_fit1), pars = c("lp__", "tau"))
+mcmc_pairs(as.matrix(cp_fit1), pars = c("lp__", "tau"), 
+           transformations = list(tau = log))
+mcmc_pairs(as.matrix(ncp_fit1), pars = c("lp__", "tau"), 
+           transformations = list(tau = log))
 
 
 # Suppose y is scaled up by factor of 10 (without changing sigma)
@@ -60,8 +69,11 @@ ncp_fit2 <- sampling(ncp_mod, data = standata2, seed = SEED)
 launch_shinystan(cp_fit2) 
 launch_shinystan(ncp_fit2)
 
-mcmc_pairs(as.matrix(cp_fit2), pars = c("lp__", "tau"))
-mcmc_pairs(as.matrix(ncp_fit2), pars = c("lp__", "tau"))
+# Geometry with cp is nicer now
+mcmc_pairs(as.matrix(cp_fit2), pars = c("theta[1]", "tau"), 
+           transformations = list(tau = log))
+mcmc_pairs(as.matrix(ncp_fit2), pars = c("theta_raw[1]", "tau"), 
+           transformations = list(tau = log))
 
 
 # Now also scale sigma (so both y and sigma are scaled up by factor of 10)
@@ -69,12 +81,15 @@ standata3 <- standata2
 standata3$sigma <- 10 * standata3$sigma
 cp_fit3 <- sampling(cp_mod, data = standata3, seed = SEED)
 ncp_fit3 <- sampling(ncp_mod, data = standata3, seed = SEED, 
-                     control = list(stepsize = 0.01, adapt_delta = 0.95))
+                     control = list(adapt_delta = 0.95))
 
 # If sigma is also scaled up with y then ncp is better again
 launch_shinystan(cp_fit3) 
 launch_shinystan(ncp_fit3)
 
-mcmc_pairs(as.matrix(cp_fit3), pars = c("lp__", "tau"))
-mcmc_pairs(as.matrix(ncp_fit3), pars = c("lp__", "tau"))
+# Geometry with ncp is nicer again
+mcmc_pairs(as.matrix(cp_fit3), pars = c("theta[1]", "tau"), 
+           transformations = list(tau = log))
+mcmc_pairs(as.matrix(ncp_fit3), pars = c("theta_raw[1]", "tau"), 
+           transformations = list(tau = log))
 

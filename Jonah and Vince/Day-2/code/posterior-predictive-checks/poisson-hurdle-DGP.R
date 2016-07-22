@@ -1,10 +1,10 @@
-# Data generating process for simulating data for the poisson example
+# Data generating process for the poisson example
 
 set.seed(223)
 
 lambda <- 5 # poisson parameter
 theta <- 0.2 # Pr(y = 0)
-U <- 7 # truncation point
+U <- 7 # upper truncation point
 N <- 500 # sample size 
 
 y <- rep(NA, N)
